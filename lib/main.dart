@@ -3,20 +3,19 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 
 import 'app/app_services.dart';
+import 'app/device_info.dart';
 import 'app/sync_coordinator.dart';
 import 'app/sync_lifecycle.dart';
-import 'core/sync/local_store.dart';
+import 'backends/nextcloud/login_flow.dart';
+import 'backends/nextcloud/nextcloud_credentials.dart';
 import 'platform/share_intent/share_app.dart';
+import 'ui/inbox/dev_inbox_screen.dart';
+import 'ui/login/login_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final services = await AppServices.open();
-  final engine = services.engine;
-  final coordinator = engine == null
-      ? null
-      : SyncCoordinator(engine: engine, trigger: platformSyncTrigger());
-  runApp(SpecularApp(services: services, coordinator: coordinator));
-  unawaited(coordinator?.start());
+  runApp(SpecularApp(services: services));
 }
 
 /// Entry point of the Android share target, started by `ShareActivity.kt`.
@@ -24,75 +23,104 @@ Future<void> main() async {
 Future<void> shareMain() => runShareApp();
 
 class SpecularApp extends StatefulWidget {
-  const SpecularApp({super.key, required this.services, this.coordinator});
+  const SpecularApp({super.key, required this.services});
 
   final AppServices services;
-
-  /// Null until the user has logged in.
-  final SyncCoordinator? coordinator;
 
   @override
   State<SpecularApp> createState() => _SpecularAppState();
 }
 
 class _SpecularAppState extends State<SpecularApp> {
-  AppLifecycleListener? _lifecycle;
+  SyncCoordinator? _coordinator;
+  StreamSubscription<SyncState>? _stateSubscription;
+  late final AppLifecycleListener _lifecycle;
+  String? _loginMessage;
+
+  AppServices get _services => widget.services;
 
   @override
   void initState() {
     super.initState();
-    final coordinator = widget.coordinator;
-    if (coordinator != null) {
-      _lifecycle = listenForResume(coordinator.onAppResumed);
-    }
+    _lifecycle = listenForResume(() => _coordinator?.onAppResumed());
+    if (_services.isLoggedIn) _startSync();
   }
 
   @override
   void dispose() {
-    _lifecycle?.dispose();
-    unawaited(widget.coordinator?.dispose());
-    unawaited(widget.services.close());
+    _lifecycle.dispose();
+    unawaited(_stopSync());
+    unawaited(_services.close());
     super.dispose();
   }
 
+  void _startSync() {
+    final coordinator = SyncCoordinator(
+      engine: _services.engine!,
+      trigger: platformSyncTrigger(),
+    );
+    _coordinator = coordinator;
+    _stateSubscription = coordinator.states.listen((state) {
+      if (state.phase == SyncPhase.unauthorized) {
+        unawaited(
+          _logOut(
+            message:
+                'Nextcloud rejected the app password. '
+                'Please log in again.',
+          ),
+        );
+      }
+    });
+    unawaited(coordinator.start());
+  }
+
+  Future<void> _stopSync() async {
+    await _stateSubscription?.cancel();
+    _stateSubscription = null;
+    await _coordinator?.dispose();
+    _coordinator = null;
+  }
+
+  Future<void> _onLoggedIn(NextcloudCredentials credentials) async {
+    await _services.signIn(
+      credentials,
+      deviceName: defaultDeviceName(),
+      platform: currentPlatform(),
+    );
+    if (!mounted) return;
+    setState(() {
+      _loginMessage = null;
+      _startSync();
+    });
+  }
+
+  Future<void> _logOut({String? message}) async {
+    await _stopSync();
+    await _services.signOut();
+    if (!mounted) return;
+    setState(() => _loginMessage = message);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final coordinator = _coordinator;
+    final engine = _services.engine;
     return MaterialApp(
       title: 'Specular',
       theme: ThemeData(brightness: Brightness.dark),
-      home: Scaffold(
-        body: Center(
-          child: _PlaceholderStatus(
-            coordinator: widget.coordinator,
-            inbox: widget.services.engine?.watchInbox(),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Temporary status display until the real UI exists (SPEC.md §9, §13).
-class _PlaceholderStatus extends StatelessWidget {
-  const _PlaceholderStatus({required this.coordinator, required this.inbox});
-
-  final SyncCoordinator? coordinator;
-  final Stream<List<LocalItem>>? inbox;
-
-  @override
-  Widget build(BuildContext context) {
-    final coordinator = this.coordinator;
-    if (coordinator == null) return const Text('Specular · not logged in');
-    return StreamBuilder<SyncState>(
-      stream: coordinator.states,
-      initialData: coordinator.state,
-      builder: (context, state) => StreamBuilder<List<LocalItem>>(
-        stream: inbox,
-        builder: (context, items) => Text(
-          'Specular · ${state.data!.phase.name} · '
-          '${items.data?.length ?? 0} items',
-        ),
-      ),
+      home: coordinator != null && engine != null
+          ? DevInboxScreen(
+              engine: engine,
+              coordinator: coordinator,
+              onLogOut: _logOut,
+            )
+          : LoginScreen(
+              message: _loginMessage,
+              onLoggedIn: _onLoggedIn,
+              flowFactory: () => NextcloudLoginFlow(
+                clientName: 'Specular (${defaultDeviceName()})',
+              ),
+            ),
     );
   }
 }
