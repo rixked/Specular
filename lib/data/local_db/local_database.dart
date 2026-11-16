@@ -46,8 +46,15 @@ class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor);
 
   /// Opens the app's database file in the platform's app data directory.
-  factory LocalDatabase.open() =>
-      LocalDatabase(driftDatabase(name: 'specular'));
+  ///
+  /// Shared across isolates, because on Android the share target runs in
+  /// its own Flutter engine while the main app may be open too.
+  factory LocalDatabase.open() => LocalDatabase(
+    driftDatabase(
+      name: 'specular',
+      native: const DriftNativeOptions(shareAcrossIsolates: true),
+    ),
+  );
 
   @override
   int get schemaVersion => 1;

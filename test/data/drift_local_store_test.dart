@@ -8,6 +8,7 @@ import 'package:specular/core/sync/remote_layout.dart';
 import 'package:specular/core/sync/sync_engine.dart';
 import 'package:specular/data/local_db/drift_local_store.dart';
 import 'package:specular/data/local_db/local_database.dart';
+import 'package:specular/data/local_db/local_settings.dart';
 
 import '../core/sync/local_store_contract.dart';
 import '../fakes/fake_storage_backend.dart';
@@ -22,6 +23,21 @@ void main() {
     () async => DriftLocalStore(db = LocalDatabase(NativeDatabase.memory())),
     dispose: () async => db?.close(),
   );
+
+  group('LocalSettings', () {
+    test('creates the device ID once and keeps it', () async {
+      final db = LocalDatabase(NativeDatabase.memory());
+      final settings = LocalSettings(db);
+      final id = await settings.deviceId();
+      expect(id, matches(RegExp(r'^[0-9a-f]{6}$')));
+      expect(await settings.deviceId(), id);
+
+      expect(await settings.deviceName(), isNull);
+      await settings.setDeviceName('  Pixel  ');
+      expect(await settings.deviceName(), 'Pixel');
+      await db.close();
+    });
+  });
 
   group('DriftLocalStore persistence', () {
     late Directory dir;

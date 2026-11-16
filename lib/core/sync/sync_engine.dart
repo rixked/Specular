@@ -108,27 +108,49 @@ final class SyncEngine {
   ///
   /// The item is stored locally before any network access, so it is never
   /// lost. If the upload fails it stays `pending` and is retried by [sync].
+  /// [title] is an optional display title, for example a link's page title.
   /// Throws [ArgumentError] if [input] is blank.
-  Future<Item> send(String input) => _serialized(() async {
+  Future<Item> send(String input, {String? title}) async {
+    final item = await enqueue(input, title: title);
+    await uploadPending();
+    return item;
+  }
+
+  /// Like [send], but only stores the item locally. Returns as soon as the
+  /// item is safe, without touching the network. Use [uploadPending] or
+  /// [sync] to upload it.
+  Future<Item> enqueue(String input, {String? title}) => _serialized(() async {
     final content = input.trim();
     if (content.isEmpty) {
       throw ArgumentError.value(input, 'input', 'Nothing to send');
     }
+    final trimmedTitle = title?.trim();
     final now = _clock().toUtc();
     final item = Item(
       id: ItemIds.generate(now: now, deviceId: deviceId, random: _random),
       type: registry.classify(content),
       content: content,
+      title: (trimmedTitle == null || trimmedTitle.isEmpty)
+          ? null
+          : trimmedTitle,
       createdAt: now,
       sourceDevice: deviceId,
     );
     await store.put(LocalItem(item: item, status: SyncStatus.pending));
+    return item;
+  });
+
+  /// Tries to upload queued items that are due, without fetching anything.
+  /// Returns how many reached the server. Never throws for network or
+  /// server problems; failed items stay queued.
+  Future<int> uploadPending() => _serialized(() async {
+    final uploaded = _Counter();
     try {
-      await _flushOutgoing(_Counter());
+      await _flushOutgoing(uploaded);
     } on StorageException {
       // Stays queued; sync() reports persistent problems.
     }
-    return item;
+    return uploaded.value;
   });
 
   /// Uploads queued items, then fetches remote changes and applies expiry.
