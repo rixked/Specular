@@ -437,9 +437,14 @@ void main() {
         final item = await pc.engine.send('Race');
         var injected = false;
         backend.fault = (op, path, phase) {
-          if (op == 'PUT' && path == 'Notes/Race.md' && !injected) {
+          if (op == 'PUT' &&
+              path == RemoteLayout.notePath('Race.md') &&
+              !injected) {
             injected = true;
-            backend.seedFile('Notes/Race.md', 'from the other device');
+            backend.seedFile(
+              RemoteLayout.notePath('Race.md'),
+              'from the other device',
+            );
             return StorageAlreadyExistsException(path);
           }
           return null;
@@ -453,7 +458,10 @@ void main() {
       final item = await phone.engine.send('anon');
       await pc.engine.sync();
       await pc.engine.keep(item.id);
-      expect(backend.read('Notes/anon.md'), contains('Sent from a1b2c3 · '));
+      expect(
+        backend.read(RemoteLayout.notePath('anon.md')),
+        contains('Sent from a1b2c3 · '),
+      );
     });
 
     test('works for items that are still pending', () async {
@@ -475,6 +483,57 @@ void main() {
 
     test('unknown IDs are rejected', () async {
       await expectLater(pc.engine.keep('nope'), throwsArgumentError);
+    });
+
+    test('notes go to their own Specular category in the Notes app', () async {
+      await pc.engine.ensureLayout();
+      backend.seedFile('Notes/My own note.md', 'not from Specular');
+      final item = await pc.engine.send('Kept separately');
+
+      await pc.engine.keep(item.id);
+
+      expect(RemoteLayout.notes, 'Notes/Specular');
+      expect(backend.filesIn('Notes/Specular'), ['Kept separately.md']);
+      expect(backend.filesIn('Notes'), ['My own note.md']);
+    });
+  });
+
+  group('Kept view (SPEC.md §3.4.1)', () {
+    test('lists kept notes newest first, on every device', () async {
+      final first = await phone.engine.send('First kept');
+      await phone.engine.keep(first.id);
+      serverNow = serverNow.add(const Duration(hours: 1));
+      final second = await phone.engine.send('https://example.com/b');
+      await phone.engine.keep(second.id);
+      backend.seedFile(RemoteLayout.notePath('sub/ignored.md'), 'x');
+
+      final notes = await pc.engine.keptNotes();
+
+      expect(notes.map((n) => n.title), [
+        'example.com 2026-11-16',
+        'First kept',
+      ]);
+      expect(notes.first.lastModified, serverNow);
+    });
+
+    test('is empty before anything was kept', () async {
+      expect(await pc.engine.keptNotes(), isEmpty);
+    });
+
+    test('reads a kept note in full', () async {
+      final item = await phone.engine.send('Line one\nline two');
+      final fileName = await phone.engine.keep(item.id);
+
+      final text = await pc.engine.readKeptNote(fileName);
+
+      expect(text, startsWith('Line one\nline two\n\nSent from '));
+    });
+
+    test('refuses paths outside the Kept folder', () async {
+      await expectLater(
+        pc.engine.readKeptNote('../Notes/My own note.md'),
+        throwsArgumentError,
+      );
     });
   });
 

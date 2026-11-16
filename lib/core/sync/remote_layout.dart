@@ -7,11 +7,18 @@ abstract final class RemoteLayout {
   /// Attachments (v0.2+).
   static const files = 'Specular/files';
 
-  /// Kept notes. Matches the Nextcloud Notes app's default folder.
-  static const notes = 'Notes';
+  /// The Nextcloud Notes app's default folder.
+  static const notesRoot = 'Notes';
+
+  /// Kept notes (SPEC.md §3.4.1). A subfolder of the Notes app's folder, so
+  /// the app shows them as their own category "Specular", apart from the
+  /// user's other notes.
+  static const notes = '$notesRoot/Specular';
+
+  static const noteSuffix = '.md';
 
   /// Directories that must exist for v0.1.
-  static const requiredDirectories = [root, inbox, devices, notes];
+  static const requiredDirectories = [root, inbox, devices, notesRoot, notes];
 
   static const itemSuffix = '.json';
 

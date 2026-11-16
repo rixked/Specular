@@ -36,7 +36,7 @@ enum ShareOutcome {
 
 /// Turns a share into a queued item (SPEC.md §3.2).
 ///
-/// Returns as soon as the item is stored locally, so the "Sent ✦"
+/// Returns as soon as the item is stored locally, so the "Sent"
 /// confirmation can show right away. Upload separately with [uploadShared].
 Future<({ShareOutcome outcome, Item? item})> handleShare(
   SharePayload payload,

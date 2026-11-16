@@ -16,7 +16,7 @@
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
     <!-- Fully transparent window for the share target: the app the user
-         shared from stays visible behind the "Sent ✦" confirmation. -->
+         shared from stays visible behind the "Sent" confirmation. -->
     <style name="ShareTheme" parent="@android:style/Theme.Translucent.NoTitleBar">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowIsTranslucent">true</item>

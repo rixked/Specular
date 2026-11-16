@@ -42,7 +42,7 @@ class _ShareAppState extends State<_ShareApp> {
 
       if (result.outcome == ShareOutcome.sent) {
         unawaited(HapticFeedback.lightImpact());
-        // Show "Sent ✦" for about a second; upload meanwhile.
+        // Show "Sent" for about a second; upload meanwhile.
         await Future.wait([
           Future<void>.delayed(const Duration(milliseconds: 900)),
           uploadShared(services.engine!),
@@ -80,7 +80,7 @@ class ShareConfirmation extends StatelessWidget {
 
   static String? messageFor(ShareOutcome? outcome) => switch (outcome) {
     null => null,
-    ShareOutcome.sent => 'Sent ✦',
+    ShareOutcome.sent => 'Sent',
     ShareOutcome.notLoggedIn => 'Open Specular and log in first',
     ShareOutcome.nothingToSend => 'Nothing to send',
     ShareOutcome.failed => "Couldn't send. Please try again",
@@ -107,14 +107,27 @@ class ShareConfirmation extends StatelessWidget {
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(color: const Color(0x33FFFFFF)),
               ),
-              child: Text(
-                message ?? '',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.2,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (outcome == ShareOutcome.sent) ...[
+                    const Icon(
+                      Icons.check_rounded,
+                      size: 18,
+                      color: Color(0xFF7DD3FC),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Text(
+                    message ?? '',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

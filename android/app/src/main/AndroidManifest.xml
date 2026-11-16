@@ -29,7 +29,7 @@
             </intent-filter>
         </activity>
         <!-- Share target (SPEC.md §3.2): a transparent window that only
-             shows "Sent ✦", in its own task so it never opens the main UI. -->
+             shows "Sent", in its own task so it never opens the main UI. -->
         <activity
             android:name=".ShareActivity"
             android:label="Specular"

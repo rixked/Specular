@@ -10,7 +10,7 @@ import io.flutter.plugin.common.MethodChannel
 /**
  * Share target (SPEC.md §3.2): appears as "Specular" in the system Share
  * menu. Runs the lightweight `shareMain` Dart entrypoint in a transparent
- * window, shows "Sent ✦" and closes again. The main app UI never opens.
+ * window, shows "Sent" and closes again. The main app UI never opens.
  */
 class ShareActivity : FlutterActivity() {
     override fun getDartEntrypointFunctionName(): String = "shareMain"

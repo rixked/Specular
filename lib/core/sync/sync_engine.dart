@@ -225,9 +225,41 @@ final class SyncEngine {
     );
   });
 
-  /// Creates `/Specular/` and its subfolders, and `/Notes/`. Normally not
-  /// needed: the engine does this on first use.
+  /// Creates `/Specular/` and its subfolders, and `/Notes/Specular/`.
+  /// Normally not needed: the engine does this on first use.
   Future<void> ensureLayout() => _serialized(_ensureLayout);
+
+  /// Everything kept so far: the notes in `/Notes/Specular/`, newest first
+  /// (SPEC.md §3.4.1). The folder itself is the source of truth, so the
+  /// list is the same on every device.
+  Future<List<KeptNote>> keptNotes() => _serialized(() async {
+    final DirectoryListing listing;
+    try {
+      listing = await backend.list(RemoteLayout.notes);
+    } on StorageNotFoundException {
+      return const [];
+    }
+    final notes = [
+      for (final entry in listing.entries)
+        if (!entry.isDirectory && entry.name.endsWith(RemoteLayout.noteSuffix))
+          KeptNote(fileName: entry.name, lastModified: entry.lastModified),
+    ];
+    notes.sort((a, b) {
+      final byTime = (b.lastModified ?? DateTime(0)).compareTo(
+        a.lastModified ?? DateTime(0),
+      );
+      return byTime != 0 ? byTime : a.fileName.compareTo(b.fileName);
+    });
+    return notes;
+  });
+
+  /// The Markdown text of a kept note.
+  Future<String> readKeptNote(String fileName) => _serialized(() async {
+    if (fileName.contains('/') || fileName.contains('\\')) {
+      throw ArgumentError.value(fileName, 'fileName', 'Not a plain file name');
+    }
+    return utf8.decode(await backend.get(RemoteLayout.notePath(fileName)));
+  });
 
   Future<void> dispose() => _received.close();
 
@@ -492,6 +524,22 @@ final class SyncEngine {
   }
 
   static Uint8List _utf8(String text) => utf8.encode(text);
+}
+
+/// A note in the Kept view.
+final class KeptNote {
+  const KeptNote({required this.fileName, this.lastModified});
+
+  /// For example `How light bends.md`.
+  final String fileName;
+
+  /// When it was kept (server time).
+  final DateTime? lastModified;
+
+  /// The file name without `.md`, which is the note's title.
+  String get title => fileName.endsWith(RemoteLayout.noteSuffix)
+      ? fileName.substring(0, fileName.length - RemoteLayout.noteSuffix.length)
+      : fileName;
 }
 
 final class _Counter {

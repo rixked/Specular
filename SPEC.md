@@ -31,7 +31,8 @@ Everything sent is **temporary by default** and expires after 7 days. The user c
 |---|---|
 | **Item** | One thing that was sent: a link, a text snippet, or (v0.2+) an image or file. |
 | **Inbox** | The single feed of all unkept items, newest first, identical on every device. |
-| **Keep** | Turns an item into a permanent Markdown note in `/Notes/`. Kept items are no longer subject to expiry. |
+| **Keep** | Turns an item into a permanent Markdown note in `/Notes/Specular/`. Kept items are no longer subject to expiry. |
+| **Kept** | A separate view next to the inbox listing everything kept, i.e. every note in `/Notes/Specular/`. |
 | **Expiry** | Unkept items are deleted 7 days after creation (configurable later). |
 | **Device** | An installation of Specular. It has a random device ID and a human-readable name ("Arch PC", "Pixel"). |
 
@@ -51,7 +52,7 @@ The user can revoke access at any time in Nextcloud → Settings → Security.
 
 ### 3.2 Sending
 
-- **Android:** Share from any app → **Specular** → a brief "Sent ✦" confirmation appears (~1 s). The main app UI does **not** open.
+- **Android:** Share from any app → **Specular** → a brief "Sent" confirmation appears (~1 s). The main app UI does **not** open.
 - **Android, in app:** a text field at the bottom of the inbox.
 - **Desktop:** a text field at the bottom of the window, **Ctrl+V** anywhere in the window, or drag and drop.
 - **Desktop tray:** the tray icon opens a compact popup window. "Send clipboard" is a tray menu action.
@@ -64,6 +65,7 @@ The user can revoke access at any time in Nextcloud → Settings → Security.
 - **Desktop:** a system notification. Clicking it opens the link, or shows the item for text.
 - **Android:** a notification when new items are found by a background check.
 - **Tapping an item:** links open in the default browser; text is shown in full with a Copy action.
+- **Long content is never cut off for good:** a collapsed card shows one line ending in "…"; every card can be expanded to show its full text (and a link's full URL) and collapsed again.
 
 ### 3.4 Item actions
 
@@ -71,8 +73,16 @@ The user can revoke access at any time in Nextcloud → Settings → Security.
 |---|---|
 | Open | Link → browser. Text → detail view. |
 | Copy | Copies the URL or text to the clipboard. |
-| Keep | Creates a note in `/Notes/` (see §5.3), then removes the item from the inbox. |
+| Expand / Collapse | Shows the full text in place, or folds it back to one line. |
+| Keep | Creates a note in `/Notes/Specular/` (see §5.3), then moves the item from the inbox to the Kept view. |
 | Delete | Removes the item from the inbox on all devices. |
+
+### 3.4.1 Kept view
+
+- The app has two views, **Inbox** and **Kept**, switched at the top.
+- Kept lists every note in `/Notes/Specular/`, newest first, so it is the same on every device and also shows notes kept before this device was set up. No separate index is stored: the folder is the source of truth.
+- Kept cards offer Open, Copy and Expand / Collapse. Editing and deleting kept notes happens in the Nextcloud Notes app.
+- Kept notes are separated from the user's other notes: in the Notes app they appear as their own category, **Specular**.
 
 ### 3.5 Expiry
 
@@ -169,7 +179,9 @@ All paths are relative to the user's WebDAV root: `{server}/remote.php/dav/files
     <itemId>/<originalFileName>
   devices/          one JSON file per device (name, platform, last seen)
     <deviceId>.json
-/Notes/             kept items as Markdown (compatible with the Nextcloud Notes app)
+/Notes/
+  Specular/         kept items as Markdown; the Notes app shows this as the
+                    category "Specular", apart from the user's other notes
 ```
 
 ### 5.1 Key design rule: items are immutable
@@ -196,11 +208,11 @@ Devices only **create** and **delete** inbox files; they never edit an existing 
 - **`schema`:** the format version. Readers must ignore unknown fields.
 - **`attachment`** (v0.2+): `{ "path": "files/<itemId>/<name>", "mime": "...", "size": 1234 }`.
 
-### 5.3 Kept note format (`/Notes/<title>.md`)
+### 5.3 Kept note format (`/Notes/Specular/<title>.md`)
 
 - **Title:** a link uses its page title if available, otherwise its domain plus date; text uses its first line (truncated to ~60 characters). Characters invalid in file names are stripped. On a name clash, append ` (2)`, ` (3)`, ….
 - **Body:** the content, plus a footer line: `Sent from <device name> · <date>`.
-- **Nextcloud Notes app compatibility:** the Notes app lists files in its notes folder (default `Notes`). Its file suffix setting should be `.md`.
+- **Nextcloud Notes app compatibility:** the Notes app lists files in its notes folder (default `Notes`) and treats subfolders as categories, so `/Notes/Specular/` shows up as the category "Specular". Its file suffix setting should be `.md`.
 - Attachments of kept items (v0.2+) are stored next to the note and linked relatively. The exact layout will be decided in v0.2.
 
 ## 6. Sync
@@ -263,10 +275,13 @@ lib/
 
 The name defines the visual language: specular highlights, the way light catches glass.
 
-- **Look:** a dark, deep background (near-black with a slight blue tint), frosted-glass item cards and **one** spectral accent.
-- **Sending:** the item leaves as a streak of light, with a light haptic tick on Android.
+**Chosen direction: Soft Glass** (mockups: "Specular Visual Directions" canvas, artboards "A · Soft Glass" and "A · Soft Glass · Kept").
+
+- **Look:** a dark, deep background (near-black with a slight blue tint, `#0A0E16`), one soft light source in the top-left corner, frosted-glass item cards (rounded ~20 px, translucent white fill, hairline border, thin top highlight) and **one** spectral accent (default sky blue `#7DD3FC`). Type: Inter.
+- **Readability first:** text on any card, including kept ones, meets WCAG AA contrast. Translucent cards over a colored edge get an opaque dark underlay so the edge never shows through the text.
+- **Sending:** the item leaves as a streak of light, with a light haptic tick on Android. The confirmation reads "Sent" with a check mark in the accent color; no star or sparkle icon.
 - **Receiving:** the new item slides in and a glint sweeps across its surface.
-- **Kept items:** a thin, permanent prism-colored edge.
+- **Kept items:** a thin, permanent prism-colored edge, shown in the Kept view.
 - **Aging:** unkept items gradually lose their sheen over the 7 days, so age is visible without reading numbers.
 - **Living light:** highlights shift subtly with device tilt on Android (gyroscope) and follow the mouse on desktop. This can be switched off.
 
@@ -276,7 +291,6 @@ The name defines the visual language: specular highlights, the way light catches
 - The OS "reduce motion" setting is respected, and all effects can be disabled.
 - Speed beats spectacle. The experience is seasoning, never a delay.
 
-**Open:** produce 2–3 visual mockups (for example soft glass, bold prism and minimal glow) and pick a direction before building the UI.
 
 ## 10. Roadmap
 
@@ -284,10 +298,11 @@ The name defines the visual language: specular highlights, the way light catches
 
 - Login via Login Flow v2; secure credential storage.
 - Send and receive `link` and `text` items.
-- Inbox with Open, Copy, Keep and Delete.
-- Keep → Markdown note in `/Notes/`.
+- Inbox with Open, Copy, Expand / Collapse, Keep and Delete.
+- Keep → Markdown note in `/Notes/Specular/`; Kept view.
+- Soft Glass UI (§9).
 - 7-day expiry.
-- Android share target with the "Sent ✦" confirmation.
+- Android share target with the "Sent" confirmation.
 - Polling sync: desktop ~15 s; Android on open plus background.
 - Local cache and offline outgoing queue.
 - Builds for Arch Linux, Windows and Android.
@@ -313,9 +328,10 @@ The name defines the visual language: specular highlights, the way light catches
 ## 11. v0.1 acceptance criteria
 
 - [ ] A fresh install can log in to a Nextcloud server using only its URL and the browser approval.
-- [ ] Sharing a TikTok link from Android shows "Sent ✦" and the link appears on the Linux desktop within ~20 s.
+- [ ] Sharing a TikTok link from Android shows "Sent" and the link appears on the Linux desktop within ~20 s.
 - [ ] Text typed on desktop appears on Android when the app is opened.
-- [ ] Keep creates a readable `.md` note in `/Notes/` that shows up in the Nextcloud Notes app.
+- [ ] Keep creates a readable `.md` note in `/Notes/Specular/` that shows up in the Nextcloud Notes app under the category "Specular", and in the app's Kept view.
+- [ ] Any item's full text can be read by expanding its card.
 - [ ] Items older than 7 days disappear from all devices.
 - [ ] Sending while offline queues the item, and it uploads automatically when the device reconnects.
 - [ ] No credentials appear in logs or plain-text files.
@@ -331,5 +347,4 @@ The name defines the visual language: specular highlights, the way light catches
 
 ## 13. Open decisions
 
-- **Visual direction** (see §9).
 - **License** for the repository.

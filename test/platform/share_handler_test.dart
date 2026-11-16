@@ -134,12 +134,12 @@ void main() {
   });
 
   group('ShareConfirmation', () {
-    testWidgets('shows "Sent ✦" after sending', (tester) async {
+    testWidgets('shows "Sent" after sending', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(home: ShareConfirmation(outcome: ShareOutcome.sent)),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Sent ✦'), findsOneWidget);
+      expect(find.text('Sent'), findsOneWidget);
     });
 
     testWidgets('tells the user to log in first', (tester) async {
