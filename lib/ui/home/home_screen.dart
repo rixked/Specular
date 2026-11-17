@@ -13,7 +13,9 @@ import '../common/specular_background.dart';
 import '../common/url_opener.dart';
 import '../inbox/inbox_item_card.dart';
 import '../kept/kept_note_card.dart';
+import '../../platform/updater/update_service.dart';
 import '../theme/tokens.dart';
+import '../update/update_controller.dart';
 
 enum HomeTab { inbox, kept }
 
@@ -27,7 +29,11 @@ class HomeScreen extends StatefulWidget {
     required this.onLogOut,
     this.openUrl = openInBrowser,
     this.clock = DateTime.now,
+    this.updates,
   });
+
+  /// Null where Specular has no releases.
+  final UpdateController? updates;
 
   final SyncEngine engine;
   final SyncCoordinator coordinator;
@@ -207,6 +213,22 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// The manual check from the menu: always reports its outcome.
+  Future<void> _checkForUpdates() async {
+    final updates = widget.updates;
+    if (updates == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await updates.check();
+    final message = switch (result) {
+      UpdateAvailable(:final release) =>
+        'Update available: v${release.version}',
+      UpToDate() => "You're up to date (v${updates.currentVersion})",
+      UpdateCheckFailed(:final message) =>
+        "Couldn't check for updates: $message",
+    };
+    messenger.showSnackBar(SnackBar(content: Text(message)));
+  }
+
   static String _describeError(Object e) => switch (e) {
     StorageUnavailableException() =>
       "You're offline. Try again when connected.",
@@ -233,6 +255,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       unawaited(_loadKept());
                     },
                     onLogOut: widget.onLogOut,
+                    updates: widget.updates,
+                    onCheckUpdates: _checkForUpdates,
                   ),
                   _Tabs(
                     tab: _tab,
@@ -452,11 +476,15 @@ class _Header extends StatelessWidget {
     required this.coordinator,
     required this.onSyncNow,
     required this.onLogOut,
+    this.updates,
+    this.onCheckUpdates,
   });
 
   final SyncCoordinator coordinator;
   final VoidCallback onSyncNow;
   final VoidCallback onLogOut;
+  final UpdateController? updates;
+  final VoidCallback? onCheckUpdates;
 
   @override
   Widget build(BuildContext context) {
@@ -489,12 +517,27 @@ class _Header extends StatelessWidget {
             ),
             onSelected: (value) => switch (value) {
               'sync' => onSyncNow(),
+              'updates' => onCheckUpdates?.call(),
+              'auto-updates' => unawaited(
+                updates?.setAutoCheck(!(updates?.autoCheck.value ?? true)),
+              ),
               'logout' => onLogOut(),
               _ => null,
             },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'sync', child: Text('Sync now')),
-              PopupMenuItem(value: 'logout', child: Text('Log out')),
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'sync', child: Text('Sync now')),
+              if (updates case final updates?) ...[
+                const PopupMenuItem(
+                  value: 'updates',
+                  child: Text('Check for updates'),
+                ),
+                CheckedPopupMenuItem(
+                  value: 'auto-updates',
+                  checked: updates.autoCheck.value,
+                  child: const Text('Check automatically'),
+                ),
+              ],
+              const PopupMenuItem(value: 'logout', child: Text('Log out')),
             ],
           ),
         ],

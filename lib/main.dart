@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:pub_semver/pub_semver.dart';
 
 import 'app/app_services.dart';
 import 'app/device_info.dart';
@@ -11,14 +13,20 @@ import 'backends/nextcloud/login_flow.dart';
 import 'backends/nextcloud/nextcloud_credentials.dart';
 import 'platform/background/background_sync.dart';
 import 'platform/share_intent/share_app.dart';
+import 'platform/updater/update_service.dart';
 import 'ui/home/home_screen.dart';
 import 'ui/login/login_screen.dart';
 import 'ui/theme/specular_theme.dart';
+import 'ui/update/update_banner.dart';
+import 'ui/update/update_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final services = await AppServices.open();
-  runApp(SpecularApp(services: services));
+  final updates = await _createUpdateController(services);
+  runApp(SpecularApp(services: services, updates: updates));
+  // Check for updates right at start (SPEC.md §3.6); never blocks the app.
+  unawaited(updates?.start().catchError((Object _) {}));
   unawaited(
     scheduleBackgroundSync().catchError((Object _) {
       // Background sync is a bonus; the app syncs on open/resume anyway.
@@ -30,10 +38,30 @@ Future<void> main() async {
 @pragma('vm:entry-point')
 Future<void> shareMain() => runShareApp();
 
+/// Null on platforms without Specular releases, or if the version is
+/// unreadable.
+Future<UpdateController?> _createUpdateController(AppServices services) async {
+  final platform = currentUpdatePlatform();
+  if (platform == null) return null;
+  try {
+    final info = await PackageInfo.fromPlatform();
+    return UpdateController(
+      service: UpdateService(
+        currentVersion: Version.parse(info.version),
+        platform: platform,
+      ),
+      settings: services.settings,
+    );
+  } on Object {
+    return null;
+  }
+}
+
 class SpecularApp extends StatefulWidget {
-  const SpecularApp({super.key, required this.services});
+  const SpecularApp({super.key, required this.services, this.updates});
 
   final AppServices services;
+  final UpdateController? updates;
 
   @override
   State<SpecularApp> createState() => _SpecularAppState();
@@ -56,6 +84,7 @@ class _SpecularAppState extends State<SpecularApp> {
 
   @override
   void dispose() {
+    widget.updates?.dispose();
     _lifecycle.dispose();
     unawaited(_stopSync());
     unawaited(_services.close());
@@ -117,11 +146,16 @@ class _SpecularAppState extends State<SpecularApp> {
       title: 'Specular',
       debugShowCheckedModeBanner: false,
       theme: specularTheme(),
+      builder: (context, child) => UpdateOverlay(
+        controller: widget.updates,
+        child: child ?? const SizedBox.shrink(),
+      ),
       home: coordinator != null && engine != null
           ? HomeScreen(
               engine: engine,
               coordinator: coordinator,
               onLogOut: _logOut,
+              updates: widget.updates,
             )
           : LoginScreen(
               message: _loginMessage,

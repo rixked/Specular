@@ -3,14 +3,25 @@ import 'dart:math';
 import 'package:drift/drift.dart';
 
 import '../../core/models/item_ids.dart';
+import '../../core/updates/update_settings.dart';
 import 'local_database.dart';
 
 /// Per-installation settings kept in the local database.
-final class LocalSettings {
+final class LocalSettings implements UpdateSettings {
   LocalSettings(this._db);
 
   static const _deviceIdKey = 'device_id';
   static const _deviceNameKey = 'device_name';
+  static const _autoCheckUpdatesKey = 'auto_check_updates';
+
+  /// On by default (SPEC.md §3.6).
+  @override
+  Future<bool> autoCheckUpdates() async =>
+      await _get(_autoCheckUpdatesKey) != 'false';
+
+  @override
+  Future<void> setAutoCheckUpdates(bool enabled) =>
+      _set(_autoCheckUpdatesKey, enabled ? 'true' : 'false');
 
   final LocalDatabase _db;
 

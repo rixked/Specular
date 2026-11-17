@@ -4,6 +4,12 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Release signing (SPEC.md §3.6). The release workflow provides the keystore
+// from GitHub Secrets through these environment variables. The key must
+// never change, or Android refuses updates. Without them (local builds),
+// release builds fall back to the debug key and cannot update a released app.
+val releaseKeystore: String? = System.getenv("SPECULAR_KEYSTORE_PATH")
+
 android {
     namespace = "de.rixk.specular"
     compileSdk = flutter.compileSdkVersion
@@ -15,10 +21,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "de.rixk.specular"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
@@ -29,13 +32,32 @@ android {
         versionName = flutter.versionName
     }
 
-    buildTypes {
-        release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storeType = "pkcs12"
+                storePassword = System.getenv("SPECULAR_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("SPECULAR_KEY_ALIAS")
+                keyPassword = System.getenv("SPECULAR_KEYSTORE_PASSWORD")
+            }
         }
     }
+
+    buildTypes {
+        release {
+            signingConfig = if (releaseKeystore != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+        }
+    }
+}
+
+dependencies {
+    // FileProvider, to hand a downloaded update APK to the system installer.
+    implementation("androidx.core:core-ktx:1.13.1")
 }
 
 kotlin {

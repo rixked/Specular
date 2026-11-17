@@ -92,7 +92,7 @@ On every sync, a device deletes inbox items whose **server-side** creation time 
 
 The repository (`github.com/rixked/Specular`) is public, and every release is published as a **GitHub Release**. The app updates itself from there.
 
-- **Checking:** on app start, and then at most once every 24 hours, the app requests `GET https://api.github.com/repos/rixked/Specular/releases/latest`. Drafts and pre-releases are ignored. Settings also has a manual **Check for updates** button.
+- **Checking:** on every app start (without delaying it), and every 24 hours while the app keeps running, the app requests `GET https://api.github.com/repos/rixked/Specular/releases/latest`. Drafts and pre-releases are ignored. Settings also has a manual **Check for updates** button.
 - **Opt-out:** the automatic check is **on by default** and can be switched off in Settings. The manual check always works.
 - **Privacy:** the request is anonymous. It sends no device ID, no Nextcloud URL and no other user data. The User-Agent is `Specular/<version>`.
 - **Notifying:** when a newer version exists, a small, dismissible banner shows "Update available · v0.3.0" with the release notes. It never blocks the app and never interrupts sending.
@@ -306,6 +306,8 @@ The name defines the visual language: specular highlights, the way light catches
 - Polling sync: desktop ~15 s; Android on open plus background.
 - Local cache and offline outgoing queue.
 - Builds for Arch Linux, Windows and Android.
+- Release pipeline on GitHub Actions: signed APK, Windows installer (Inno Setup, per-user), Linux tarball, `SHA256SUMS` (§3.6). Moved up from v0.2 so test devices update in place.
+- In-app updates: update check, banner, and download and install on Android and Windows (§3.6).
 
 ### v0.2: files & polish
 
@@ -313,8 +315,6 @@ The name defines the visual language: specular highlights, the way light catches
 - Notifications on all platforms.
 - Tray icon and popup on desktop.
 - Full motion design from §9.
-- Release pipeline on GitHub Actions: signed APK, Windows installer, Linux tarball, `SHA256SUMS` (§3.6).
-- In-app updates: update check, banner, and download and install on Android and Windows (§3.6).
 
 ### Later
 

@@ -2,6 +2,9 @@
     <!-- Talking to the user's Nextcloud. Flutter only adds this to debug
          builds by default. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- In-app updates (SPEC.md §3.6): hand a downloaded, checksum-verified
+         release APK to the system installer. The user confirms every install. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
         android:label="Specular"
         android:name="${applicationName}"
@@ -46,6 +49,16 @@
                 <data android:mimeType="text/plain"/>
             </intent-filter>
         </activity>
+        <!-- Shares downloaded update APKs (cache/updates/) with the installer. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="de.rixk.specular.updates"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_paths"/>
+        </provider>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
