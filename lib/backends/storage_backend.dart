@@ -106,6 +106,19 @@ final class StorageUnavailableException extends StorageException {
   const StorageUnavailableException(super.message);
 }
 
+/// The server's TLS certificate is not trusted by the system and does not
+/// match a pinned fingerprint (SPEC.md §8). The user may trust it
+/// explicitly after comparing [fingerprint].
+final class StorageUntrustedCertificateException extends StorageException {
+  const StorageUntrustedCertificateException(this.host, this.fingerprint)
+    : super('Untrusted certificate for $host');
+
+  final String host;
+
+  /// SHA-256 of the certificate, as `AB:CD:…`.
+  final String fingerprint;
+}
+
 /// Any other unexpected response.
 final class StorageProtocolException extends StorageException {
   const StorageProtocolException(super.message);

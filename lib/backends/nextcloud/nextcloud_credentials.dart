@@ -10,12 +10,14 @@ final class NextcloudCredentials {
     required this.server,
     required this.loginName,
     required this.appPassword,
+    this.pinnedCertificate,
   });
 
   factory NextcloudCredentials.fromJson(Map<String, Object?> json) {
     final server = json['server'];
     final loginName = json['loginName'];
     final appPassword = json['appPassword'];
+    final pinned = json['pinnedCertificate'];
     if (server is! String || loginName is! String || appPassword is! String) {
       throw const FormatException('Incomplete Nextcloud credentials');
     }
@@ -23,8 +25,18 @@ final class NextcloudCredentials {
       server: normalizeServerUrl(server),
       loginName: loginName,
       appPassword: appPassword,
+      pinnedCertificate: pinned is String ? pinned : null,
     );
   }
+
+  /// The same credentials with [fingerprint] pinned.
+  NextcloudCredentials withPinnedCertificate(String? fingerprint) =>
+      NextcloudCredentials(
+        server: server,
+        loginName: loginName,
+        appPassword: appPassword,
+        pinnedCertificate: fingerprint,
+      );
 
   /// Base URL of the Nextcloud instance, always HTTPS, without trailing
   /// slash, for example `https://cloud.example.com` or
@@ -32,6 +44,10 @@ final class NextcloudCredentials {
   final Uri server;
   final String loginName;
   final String appPassword;
+
+  /// SHA-256 fingerprint (`AB:CD:…`) of a self-signed certificate the user
+  /// explicitly trusted for this server, or null (SPEC.md §8).
+  final String? pinnedCertificate;
 
   /// The user's WebDAV root: `{server}/remote.php/dav/files/{loginName}/`.
   Uri get webDavRoot => server.replace(
@@ -53,6 +69,7 @@ final class NextcloudCredentials {
     'server': server.toString(),
     'loginName': loginName,
     'appPassword': appPassword,
+    if (pinnedCertificate != null) 'pinnedCertificate': pinnedCertificate,
   };
 
   @override

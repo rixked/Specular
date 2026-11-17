@@ -10,10 +10,18 @@ import '../common/specular_background.dart';
 import '../common/url_opener.dart';
 import '../theme/tokens.dart';
 
+/// Creates a login flow for [server]. [pinnedCertificate] is a self-signed
+/// certificate's fingerprint the user explicitly trusted, or null.
+typedef LoginFlowFactory = NextcloudLoginFlow Function(
+  Uri server,
+  String? pinnedCertificate,
+);
+
 /// First launch (SPEC.md §3.1): the user enters their Nextcloud address,
 /// approves access in the browser, and never types a password.
 ///
-/// Deliberately plain until the visual direction is chosen (SPEC.md §9).
+/// A self-signed certificate is never accepted silently (SPEC.md §8): the
+/// screen shows its fingerprint and continues only after the user trusts it.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({
     super.key,
@@ -27,7 +35,7 @@ class LoginScreen extends StatefulWidget {
   final Future<void> Function(NextcloudCredentials credentials) onLoggedIn;
 
   /// Creates the login flow; one per attempt.
-  final NextcloudLoginFlow Function() flowFactory;
+  final LoginFlowFactory flowFactory;
   final UrlOpener openUrl;
 
   /// Shown above the form, for example after the app password was revoked.
@@ -39,6 +47,83 @@ class LoginScreen extends StatefulWidget {
 
 enum _Step { form, starting, waiting, finishing }
 
+/// Asks the user to trust a self-signed certificate after comparing its
+/// fingerprint (SPEC.md §8).
+class _TrustCertificatePanel extends StatelessWidget {
+  const _TrustCertificatePanel({
+    required this.certificate,
+    required this.onTrust,
+    required this.onCancel,
+  });
+
+  final StorageUntrustedCertificateException certificate;
+  final VoidCallback onTrust;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(SpecularRadii.card),
+        border: Border.all(color: SpecularColors.pendingText),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: SpecularColors.pendingText,
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Untrusted certificate',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Your system doesn't trust the certificate of ${certificate.host}. "
+            'Only continue if you set up this server yourself and this '
+            "fingerprint matches the server's certificate:",
+            style: const TextStyle(fontSize: 14, height: 1.5),
+          ),
+          const SizedBox(height: 10),
+          SelectableText(
+            'SHA-256  ${certificate.fingerprint}',
+            key: const Key('fingerprint'),
+            style: const TextStyle(
+              fontSize: 12.5,
+              height: 1.5,
+              color: SpecularColors.icon,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            children: [
+              TextButton(onPressed: onCancel, child: const Text('Cancel')),
+              FilledButton(
+                key: const Key('trust'),
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
+                onPressed: onTrust,
+                child: const Text('Trust and continue'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _LoginScreenState extends State<LoginScreen> {
   final _server = TextEditingController();
   _Step _step = _Step.form;
@@ -47,6 +132,13 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _browserFailed = false;
   Completer<void>? _cancel;
   NextcloudLoginFlow? _flow;
+
+  /// A certificate waiting for the user's decision.
+  StorageUntrustedCertificateException? _untrusted;
+
+  /// The fingerprint the user trusted, and the host it was trusted for.
+  String? _pinned;
+  String? _pinnedHost;
 
   @override
   void dispose() {
@@ -58,18 +150,28 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _logIn() async {
-    final flow = widget.flowFactory();
+    final Uri server;
+    try {
+      server = normalizeServerUrl(_server.text);
+    } on InvalidServerUrlException catch (e) {
+      _fail(e.message);
+      return;
+    }
+    // A trust decision only ever applies to the host it was made for.
+    final pinned = _pinnedHost == server.host ? _pinned : null;
+    final flow = widget.flowFactory(server, pinned);
     final cancel = Completer<void>();
     setState(() {
       _flow = flow;
       _cancel = cancel;
       _step = _Step.starting;
       _error = null;
+      _untrusted = null;
       _browserFailed = false;
     });
 
     try {
-      final session = await flow.start(_server.text);
+      final session = await flow.start(server.toString());
       if (cancel.isCompleted) return;
       final opened = await widget.openUrl(session.loginUrl);
       if (!mounted || cancel.isCompleted) return;
@@ -85,9 +187,12 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       if (!mounted) return;
       setState(() => _step = _Step.finishing);
-      await widget.onLoggedIn(credentials);
+      await widget.onLoggedIn(credentials.withPinnedCertificate(pinned));
     } on InvalidServerUrlException catch (e) {
       _fail(e.message);
+    } on StorageUntrustedCertificateException catch (e) {
+      _fail(null);
+      if (mounted) setState(() => _untrusted = e);
     } on LoginFlowCancelledException catch (e) {
       _fail(cancel.isCompleted ? null : e.message);
     } on StorageUnavailableException {
@@ -103,6 +208,17 @@ class _LoginScreenState extends State<LoginScreen> {
       flow.close();
       if (identical(_flow, flow)) _flow = null;
     }
+  }
+
+  void _trustCertificate() {
+    final untrusted = _untrusted;
+    if (untrusted == null) return;
+    setState(() {
+      _pinned = untrusted.fingerprint;
+      _pinnedHost = untrusted.host;
+      _untrusted = null;
+    });
+    unawaited(_logIn());
   }
 
   void _cancelLogin() {
@@ -193,20 +309,26 @@ class _LoginScreenState extends State<LoginScreen> {
             hintText: 'cloud.example.com',
             errorText: _error,
             errorMaxLines: 3,
-            border: const OutlineInputBorder(),
           ),
         ),
         const SizedBox(height: 16),
-        FilledButton(
-          key: const Key('login'),
-          onPressed: busy ? null : _logIn,
-          child: busy
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Log in'),
-        ),
+        if (_untrusted case final untrusted?)
+          _TrustCertificatePanel(
+            certificate: untrusted,
+            onTrust: _trustCertificate,
+            onCancel: () => setState(() => _untrusted = null),
+          )
+        else
+          FilledButton(
+            key: const Key('login'),
+            onPressed: busy ? null : _logIn,
+            child: busy
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Log in'),
+          ),
       ],
     );
   }

@@ -6,6 +6,7 @@ import 'app/app_services.dart';
 import 'app/device_info.dart';
 import 'app/sync_coordinator.dart';
 import 'app/sync_lifecycle.dart';
+import 'backends/nextcloud/certificate_pinning.dart';
 import 'backends/nextcloud/login_flow.dart';
 import 'backends/nextcloud/nextcloud_credentials.dart';
 import 'platform/background/background_sync.dart';
@@ -125,8 +126,12 @@ class _SpecularAppState extends State<SpecularApp> {
           : LoginScreen(
               message: _loginMessage,
               onLoggedIn: _onLoggedIn,
-              flowFactory: () => NextcloudLoginFlow(
+              flowFactory: (server, pinned) => NextcloudLoginFlow(
                 clientName: 'Specular (${defaultDeviceName()})',
+                client: PinningHttpClient(
+                  host: server.host,
+                  pinnedFingerprint: pinned,
+                ),
               ),
             ),
     );

@@ -1,3 +1,4 @@
+import '../backends/nextcloud/certificate_pinning.dart';
 import '../backends/nextcloud/credential_store.dart';
 import '../backends/nextcloud/nextcloud_credentials.dart';
 import '../backends/nextcloud/webdav_backend.dart';
@@ -83,7 +84,13 @@ final class AppServices {
 
   void _attach(NextcloudCredentials credentials) {
     _credentials = credentials;
-    _backend = NextcloudWebDavBackend(credentials: credentials);
+    _backend = NextcloudWebDavBackend(
+      credentials: credentials,
+      client: PinningHttpClient(
+        host: credentials.server.host,
+        pinnedFingerprint: credentials.pinnedCertificate,
+      ),
+    );
     _engine = SyncEngine(
       backend: _backend!,
       store: DriftLocalStore(database),

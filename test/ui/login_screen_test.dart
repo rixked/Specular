@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:specular/backends/nextcloud/login_flow.dart';
 import 'package:specular/backends/nextcloud/nextcloud_credentials.dart';
+import 'package:specular/backends/storage_backend.dart';
 import 'package:specular/ui/login/login_screen.dart';
 
 http.Response _json(Object body, [int status = 200]) => http.Response(
@@ -44,7 +45,7 @@ class _Harness {
 
   Widget build(http.Client client) => MaterialApp(
     home: LoginScreen(
-      flowFactory: () => NextcloudLoginFlow(
+      flowFactory: (server, pinned) => NextcloudLoginFlow(
         client: client,
         delay: (_) => Future<void>.delayed(const Duration(milliseconds: 100)),
       ),
@@ -65,6 +66,57 @@ Future<void> _advance(WidgetTester tester, [int steps = 10]) async {
 }
 
 void main() {
+  testWidgets('a self-signed certificate needs explicit trust, then is '
+      'pinned', (tester) async {
+    const fingerprint = 'A2:ED:3C:AF';
+    final pins = <String?>[];
+    final loggedIn = <NextcloudCredentials>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LoginScreen(
+          flowFactory: (server, pinned) {
+            pins.add(pinned);
+            return NextcloudLoginFlow(
+              client: pinned == fingerprint
+                  ? _nextcloud(pendingPolls: 0)
+                  : MockClient(
+                      (_) async =>
+                          throw const StorageUntrustedCertificateException(
+                            'cloud.example.com',
+                            fingerprint,
+                          ),
+                    ),
+              delay: (_) =>
+                  Future<void>.delayed(const Duration(milliseconds: 100)),
+            );
+          },
+          openUrl: (_) async => true,
+          onLoggedIn: (c) async => loggedIn.add(c),
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('server')),
+      'cloud.example.com',
+    );
+    await tester.tap(find.byKey(const Key('login')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Untrusted certificate'), findsOneWidget);
+    expect(find.textContaining(fingerprint), findsOneWidget);
+    expect(loggedIn, isEmpty, reason: 'never accepted silently');
+
+    await tester.ensureVisible(find.byKey(const Key('trust')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('trust')));
+    await _advance(tester);
+
+    expect(pins, [null, fingerprint]);
+    expect(loggedIn.single.pinnedCertificate, fingerprint);
+  });
+
   testWidgets('logs in through the browser without a password', (tester) async {
     final harness = _Harness();
     final requests = <Uri>[];
@@ -198,7 +250,7 @@ void main() {
       MaterialApp(
         home: LoginScreen(
           message: 'Please log in again.',
-          flowFactory: NextcloudLoginFlow.new,
+          flowFactory: (server, pinned) => NextcloudLoginFlow(),
           onLoggedIn: (_) async {},
         ),
       ),
