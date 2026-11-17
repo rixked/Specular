@@ -78,9 +78,18 @@ jobs:
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          keytool -list -storetype pkcs12 \
+          # Prints the certificate fingerprint or keytool's error message;
+          # never the password.
+          keytool -list -v -storetype pkcs12 \
             -keystore "$RUNNER_TEMP/specular-release.p12" \
-            -storepass:env STORE_PASSWORD -alias "$KEY_ALIAS" > /dev/null
+            -storepass:env STORE_PASSWORD -alias "$KEY_ALIAS" \
+            | grep -E "Alias|SHA256|Valid|Entry type" || {
+              echo "::error::keytool could not read the signing key"
+              keytool -list -storetype pkcs12 \
+                -keystore "$RUNNER_TEMP/specular-release.p12" \
+                -storepass:env STORE_PASSWORD 2>&1 | tail -5
+              exit 1
+            }
       - name: Build the signed APK
         env:
           SPECULAR_KEYSTORE_PATH: ${{ runner.temp }}/specular-release.p12
