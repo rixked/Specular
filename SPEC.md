@@ -75,7 +75,7 @@ The user can revoke access at any time in Nextcloud → Settings → Security.
 | Copy | Copies the URL or text to the clipboard. |
 | Expand / Collapse | Shows the full text in place, or folds it back to one line. |
 | Keep | Creates a note in `/Notes/Specular/` (see §5.3), then moves the item from the inbox to the Kept view. |
-| Delete | Removes the item from the inbox on all devices. |
+| Delete | One tap on the card's trash icon, or swipe the card sideways. The item disappears at once and "Deleted · Undo" shows for ~4 s; only then is it removed from the inbox on all devices. |
 
 ### 3.4.1 Kept view
 

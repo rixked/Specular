@@ -53,6 +53,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, String> _deviceNames = const {};
   final _glintIds = <String>{};
 
+  /// Items hidden while "Deleted · Undo" is showing.
+  final _pendingDeletes = <String>{};
+  static const _undoWindow = Duration(seconds: 4);
+
   List<KeptNote>? _kept;
   Object? _keptError;
   bool _keptLoading = false;
@@ -88,6 +92,10 @@ class _HomeScreenState extends State<HomeScreen> {
     _clockTick?.cancel();
     _toastTimer?.cancel();
     _input.dispose();
+    // Leaving the screen (e.g. closing the app) confirms pending deletes.
+    for (final id in _pendingDeletes.toList()) {
+      unawaited(_engine.delete(id).catchError((Object _) {}));
+    }
     super.dispose();
   }
 
@@ -261,46 +269,101 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Hides the item right away and shows "Deleted · Undo". Only when the
+  /// bar closes without Undo is the item deleted on all devices.
+  void _deleteWithUndo(String id) {
+    if (!_pendingDeletes.add(id)) return;
+    setState(() {});
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    final bar = messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Deleted'),
+        duration: _undoWindow,
+        // Snack bars with an action stay until dismissed by default; this
+        // one must close on its own so the delete goes through.
+        persist: false,
+        action: SnackBarAction(
+          label: 'Undo',
+          textColor: SpecularColors.accent,
+          onPressed: () {},
+        ),
+      ),
+    );
+    unawaited(
+      bar.closed.then((reason) async {
+        if (reason == SnackBarClosedReason.action) {
+          _pendingDeletes.remove(id);
+          if (mounted) setState(() {});
+          return;
+        }
+        await _commitDelete(id);
+      }),
+    );
+  }
+
+  Future<void> _commitDelete(String id) async {
+    if (!_pendingDeletes.contains(id)) return;
+    try {
+      await _engine.delete(id);
+    } on Object catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_describeError(e))));
+      }
+    } finally {
+      _pendingDeletes.remove(id);
+      if (mounted) setState(() {});
+    }
+  }
+
   Widget _buildInbox() {
-    final items = _items ?? const <LocalItem>[];
+    final items = [
+      for (final local in _items ?? const <LocalItem>[])
+        if (!_pendingDeletes.contains(local.id)) local,
+    ];
     if (items.isEmpty) {
       return const _EmptyState(
         'Nothing here yet.\nShare something from another device.',
       );
     }
     final now = widget.clock();
-    return Builder(
-      builder: (context) {
-        return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-          itemCount: items.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 12),
-          itemBuilder: (context, i) {
-            final local = items[i];
-            final item = local.item;
-            final handler = _engine.registry.handlerFor(item.type);
-            return InboxItemCard(
-              key: ValueKey(item.id),
-              local: local,
-              handler: handler,
-              now: now,
-              deviceName: item.sourceDevice == _engine.deviceId
-                  ? 'this device'
-                  : _deviceNames[item.sourceDevice],
-              glint: _glintIds.contains(item.id),
-              onGlintDone: () => setState(() => _glintIds.remove(item.id)),
-              onOpen: () {
-                final url = Uri.tryParse(item.content);
-                if (url != null) unawaited(_openUrl(url));
-              },
-              onCopy: () => _copy(handler.copyText(item)),
-              onKeep: () => _run(() async {
-                await _engine.keep(item.id);
-                await _loadKept();
-              }, 'Kept · Notes › Specular'),
-              onDelete: () => _run(() => _engine.delete(item.id), 'Deleted'),
-            );
-          },
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      itemCount: items.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
+      itemBuilder: (context, i) {
+        final local = items[i];
+        final item = local.item;
+        final handler = _engine.registry.handlerFor(item.type);
+        return Dismissible(
+          key: ValueKey('dismiss-${item.id}'),
+          onDismissed: (_) => _deleteWithUndo(item.id),
+          background: const _SwipeToDelete(alignment: Alignment.centerLeft),
+          secondaryBackground: const _SwipeToDelete(
+            alignment: Alignment.centerRight,
+          ),
+          child: InboxItemCard(
+            key: ValueKey(item.id),
+            local: local,
+            handler: handler,
+            now: now,
+            deviceName: item.sourceDevice == _engine.deviceId
+                ? 'this device'
+                : _deviceNames[item.sourceDevice],
+            glint: _glintIds.contains(item.id),
+            onGlintDone: () => setState(() => _glintIds.remove(item.id)),
+            onOpen: () {
+              final url = Uri.tryParse(item.content);
+              if (url != null) unawaited(_openUrl(url));
+            },
+            onCopy: () => _copy(handler.copyText(item)),
+            onKeep: () => _run(() async {
+              await _engine.keep(item.id);
+              await _loadKept();
+            }, 'Kept · Notes › Specular'),
+            onDelete: () => _deleteWithUndo(item.id),
+          ),
         );
       },
     );
@@ -356,6 +419,30 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
         ),
       ],
+    );
+  }
+}
+
+/// What appears behind a card while it is swiped away.
+class _SwipeToDelete extends StatelessWidget {
+  const _SwipeToDelete({required this.alignment});
+
+  final Alignment alignment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      alignment: alignment,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: BoxDecoration(
+        color: SpecularColors.error.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(SpecularRadii.card),
+      ),
+      child: const Icon(
+        Icons.delete_outline_rounded,
+        color: SpecularColors.error,
+        semanticLabel: 'Delete',
+      ),
     );
   }
 }

@@ -100,7 +100,6 @@ void main() {
     expect(find.text(_longText), findsOneWidget);
     expect(tester.widget<Text>(find.text(_longText)).maxLines, isNull);
     expect(find.text('Keep'), findsOneWidget);
-    expect(find.text('Delete'), findsOneWidget);
 
     await tester.tap(find.byKey(ValueKey('expand-$id')));
     await tester.pumpAndSettle();
@@ -247,6 +246,71 @@ void main() {
 
     expect(await h.engine.store.items(), hasLength(1));
     await unmount(tester);
+  });
+
+  group('delete', () {
+    testWidgets('one tap on the trash icon, removed after the Undo window', (
+      tester,
+    ) async {
+      final h = _Harness();
+      final id = (await h.engine.send('delete me')).id;
+      await h.pump(tester);
+
+      await tester.tap(find.byKey(ValueKey('delete-$id')));
+      await tester.pump();
+
+      expect(find.text('delete me'), findsNothing);
+      expect(find.text('Undo'), findsOneWidget);
+      expect(
+        h.backend.exists(RemoteLayout.itemPath(id)),
+        isTrue,
+        reason: 'not deleted on other devices yet',
+      );
+
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      expect(h.backend.exists(RemoteLayout.itemPath(id)), isFalse);
+      expect(await h.engine.store.items(), isEmpty);
+      await unmount(tester);
+    });
+
+    testWidgets('Undo brings the item back and deletes nothing', (
+      tester,
+    ) async {
+      final h = _Harness();
+      final id = (await h.engine.send('keep me around')).id;
+      await h.pump(tester);
+
+      await tester.tap(find.byKey(ValueKey('delete-$id')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('keep me around'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+      expect(h.backend.exists(RemoteLayout.itemPath(id)), isTrue);
+      await unmount(tester);
+    });
+
+    testWidgets('swiping a card deletes it', (tester) async {
+      final h = _Harness();
+      final id = (await h.engine.send('swipe me')).id;
+      await h.pump(tester);
+
+      await tester.drag(find.text('swipe me'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.text('swipe me'), findsNothing);
+      expect(find.text('Undo'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      expect(h.backend.exists(RemoteLayout.itemPath(id)), isFalse);
+      await unmount(tester);
+    });
   });
 
   testWidgets('kept items leave the inbox and show up under Kept', (

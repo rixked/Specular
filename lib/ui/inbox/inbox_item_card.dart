@@ -10,7 +10,8 @@ import '../theme/tokens.dart';
 /// One inbox item as a Soft Glass card (SPEC.md §3.3, §3.4, §9).
 ///
 /// Collapsed it shows one line ending in "…"; expanded it shows the full
-/// text (and a link's full URL) plus Open, Keep and Delete.
+/// text (and a link's full URL) plus Open and Keep. Copy and Delete are
+/// always one tap away.
 class InboxItemCard extends StatefulWidget {
   const InboxItemCard({
     super.key,
@@ -152,11 +153,6 @@ class _InboxItemCardState extends State<InboxItemCard> {
                                   label: 'Keep',
                                   onPressed: widget.onKeep,
                                 ),
-                                _ActionButton(
-                                  icon: Icons.delete_outline_rounded,
-                                  label: 'Delete',
-                                  onPressed: widget.onDelete,
-                                ),
                               ],
                             ),
                           ),
@@ -169,6 +165,12 @@ class _InboxItemCardState extends State<InboxItemCard> {
                   tooltip: 'Copy',
                   icon: Icons.copy_rounded,
                   onPressed: widget.onCopy,
+                ),
+                _IconButton(
+                  key: ValueKey('delete-${item.id}'),
+                  tooltip: 'Delete',
+                  icon: Icons.delete_outline_rounded,
+                  onPressed: widget.onDelete,
                 ),
                 _ExpandButton(
                   key: ValueKey('expand-${item.id}'),
