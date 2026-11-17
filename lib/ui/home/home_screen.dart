@@ -41,6 +41,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _input = TextEditingController();
+  final _inputFocus = FocusNode(debugLabel: 'send field');
   StreamSubscription<List<LocalItem>>? _inboxSub;
   List<LocalItem>? _items;
   StreamSubscription<List<Item>>? _received;
@@ -75,10 +76,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     unawaited(_loadDeviceNames());
     unawaited(_loadKept());
+    HardwareKeyboard.instance.addHandler(_onKey);
   }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    _inputFocus.dispose();
     unawaited(_inboxSub?.cancel());
     unawaited(_received?.cancel());
     _clockTick?.cancel();
@@ -118,11 +122,36 @@ class _HomeScreenState extends State<HomeScreen> {
     final text = _input.text;
     if (text.trim().isEmpty) return;
     _input.clear();
+    // Leave the field, so the next Ctrl+V sends right away again.
+    _inputFocus.unfocus();
     await _sendText(text);
   }
 
-  /// Ctrl+V anywhere in the window (outside the send field) sends the
-  /// clipboard right away (SPEC.md §3.2).
+  /// Ctrl+V (Cmd+V) anywhere in the window sends the clipboard right away
+  /// (SPEC.md §3.2), wherever the focus is, unless a text field is being
+  /// edited: then the key goes to the field's own paste.
+  ///
+  /// A global keyboard handler instead of a focus-based shortcut, because
+  /// clicking around can move the focus out of this screen's subtree.
+  bool _onKey(KeyEvent event) {
+    if (event is! KeyDownEvent || event.logicalKey != LogicalKeyboardKey.keyV) {
+      return false;
+    }
+    final keyboard = HardwareKeyboard.instance;
+    if (!keyboard.isControlPressed && !keyboard.isMetaPressed) return false;
+    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return false;
+    if (_isEditingText()) return false;
+    unawaited(_pasteAndSend());
+    return true;
+  }
+
+  static bool _isEditingText() {
+    final focused = FocusManager.instance.primaryFocus?.context;
+    if (focused == null) return false;
+    return focused.widget is EditableText ||
+        focused.findAncestorWidgetOfExactType<EditableText>() != null;
+  }
+
   Future<void> _pasteAndSend() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text;
@@ -181,21 +210,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Shortcuts(
-      shortcuts: const {
-        SingleActivator(LogicalKeyboardKey.keyV, control: true):
-            _PasteToSendIntent(),
-        SingleActivator(LogicalKeyboardKey.keyV, meta: true):
-            _PasteToSendIntent(),
-      },
-      child: Actions(
-        actions: {_PasteToSendIntent: _PasteToSendAction(_pasteAndSend)},
-        child: Focus(autofocus: true, child: _buildScaffold()),
-      ),
-    );
-  }
-
-  Widget _buildScaffold() {
     return Scaffold(
       backgroundColor: SpecularColors.background,
       body: SpecularBackground(
@@ -227,7 +241,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       HomeTab.kept => _buildKept(),
                     },
                   ),
-                  _SendBar(controller: _input, onSend: _send),
+                  _SendBar(
+                    controller: _input,
+                    focusNode: _inputFocus,
+                    onSend: _send,
+                  ),
                 ],
               ),
               Positioned(
@@ -339,32 +357,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ],
     );
-  }
-}
-
-class _PasteToSendIntent extends Intent {
-  const _PasteToSendIntent();
-}
-
-/// Sends the clipboard on Ctrl+V, unless a text field has the focus: then
-/// the action is disabled and the key goes on to the field's own paste.
-class _PasteToSendAction extends Action<_PasteToSendIntent> {
-  _PasteToSendAction(this.onPaste);
-
-  final Future<void> Function() onPaste;
-
-  @override
-  bool isEnabled(_PasteToSendIntent intent) {
-    final focused = FocusManager.instance.primaryFocus?.context;
-    if (focused == null) return true;
-    return focused.widget is! EditableText &&
-        focused.findAncestorWidgetOfExactType<EditableText>() == null;
-  }
-
-  @override
-  Object? invoke(_PasteToSendIntent intent) {
-    unawaited(onPaste());
-    return null;
   }
 }
 
@@ -575,9 +567,14 @@ class _TabButton extends StatelessWidget {
 }
 
 class _SendBar extends StatelessWidget {
-  const _SendBar({required this.controller, required this.onSend});
+  const _SendBar({
+    required this.controller,
+    required this.focusNode,
+    required this.onSend,
+  });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final VoidCallback onSend;
 
   @override
@@ -587,15 +584,25 @@ class _SendBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: TextField(
-              key: const Key('send'),
-              controller: controller,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => onSend(),
-              minLines: 1,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                hintText: 'Send a link or a note',
+            // Esc or a click elsewhere leaves the field, so Ctrl+V sends
+            // directly again.
+            child: CallbackShortcuts(
+              bindings: {
+                const SingleActivator(LogicalKeyboardKey.escape):
+                    focusNode.unfocus,
+              },
+              child: TextField(
+                key: const Key('send'),
+                controller: controller,
+                focusNode: focusNode,
+                textInputAction: TextInputAction.send,
+                onSubmitted: (_) => onSend(),
+                onTapOutside: (_) => focusNode.unfocus(),
+                minLines: 1,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText: 'Send a link or a note',
+                ),
               ),
             ),
           ),

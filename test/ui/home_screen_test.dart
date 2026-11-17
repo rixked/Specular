@@ -192,6 +192,63 @@ void main() {
     await unmount(tester);
   });
 
+  Future<void> pressCtrlV(WidgetTester tester) async {
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    await tester.pump();
+  }
+
+  testWidgets('Ctrl+V keeps working after typing and sending in the field', (
+    tester,
+  ) async {
+    final h = _Harness();
+    await h.pump(tester);
+
+    await pressCtrlV(tester);
+    expect(await h.engine.store.items(), hasLength(1));
+
+    await tester.tap(find.byKey(const Key('send')));
+    await tester.enterText(find.byKey(const Key('send')), 'typed by hand');
+    await tester.tap(find.byKey(const Key('send-button')));
+    await tester.pump();
+    await tester.pump();
+    expect(await h.engine.store.items(), hasLength(2));
+
+    await pressCtrlV(tester);
+    await pressCtrlV(tester);
+    expect(await h.engine.store.items(), hasLength(4));
+    await unmount(tester);
+  });
+
+  testWidgets('Esc leaves the field, then Ctrl+V sends', (tester) async {
+    final h = _Harness();
+    await h.pump(tester);
+
+    await tester.tap(find.byKey(const Key('send')));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    await pressCtrlV(tester);
+
+    expect(await h.engine.store.items(), hasLength(1));
+    await unmount(tester);
+  });
+
+  testWidgets('Ctrl+V works wherever the focus ended up', (tester) async {
+    final h = _Harness();
+    await h.pump(tester);
+
+    // For example after clicking around: focus outside this screen.
+    FocusManager.instance.rootScope.requestFocus();
+    await tester.pump();
+    await pressCtrlV(tester);
+
+    expect(await h.engine.store.items(), hasLength(1));
+    await unmount(tester);
+  });
+
   testWidgets('kept items leave the inbox and show up under Kept', (
     tester,
   ) async {
