@@ -118,6 +118,19 @@ class _HomeScreenState extends State<HomeScreen> {
     final text = _input.text;
     if (text.trim().isEmpty) return;
     _input.clear();
+    await _sendText(text);
+  }
+
+  /// Ctrl+V anywhere in the window (outside the send field) sends the
+  /// clipboard right away (SPEC.md §3.2).
+  Future<void> _pasteAndSend() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text;
+    if (text == null || text.trim().isEmpty) return;
+    await _sendText(text);
+  }
+
+  Future<void> _sendText(String text) async {
     unawaited(HapticFeedback.lightImpact());
     await _engine.send(text);
     if (!mounted) return;
@@ -168,6 +181,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.keyV, control: true):
+            _PasteToSendIntent(),
+        SingleActivator(LogicalKeyboardKey.keyV, meta: true):
+            _PasteToSendIntent(),
+      },
+      child: Actions(
+        actions: {_PasteToSendIntent: _PasteToSendAction(_pasteAndSend)},
+        child: Focus(autofocus: true, child: _buildScaffold()),
+      ),
+    );
+  }
+
+  Widget _buildScaffold() {
     return Scaffold(
       backgroundColor: SpecularColors.background,
       body: SpecularBackground(
@@ -311,6 +339,32 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ],
     );
+  }
+}
+
+class _PasteToSendIntent extends Intent {
+  const _PasteToSendIntent();
+}
+
+/// Sends the clipboard on Ctrl+V, unless a text field has the focus: then
+/// the action is disabled and the key goes on to the field's own paste.
+class _PasteToSendAction extends Action<_PasteToSendIntent> {
+  _PasteToSendAction(this.onPaste);
+
+  final Future<void> Function() onPaste;
+
+  @override
+  bool isEnabled(_PasteToSendIntent intent) {
+    final focused = FocusManager.instance.primaryFocus?.context;
+    if (focused == null) return true;
+    return focused.widget is! EditableText &&
+        focused.findAncestorWidgetOfExactType<EditableText>() == null;
+  }
+
+  @override
+  Object? invoke(_PasteToSendIntent intent) {
+    unawaited(onPaste());
+    return null;
   }
 }
 

@@ -67,6 +67,9 @@ void main() {
           if (call.method == 'Clipboard.setData') {
             clipboard.add((call.arguments as Map)['text'] as String);
           }
+          if (call.method == 'Clipboard.getData') {
+            return {'text': 'https://example.com/pasted'};
+          }
           return null;
         });
   });
@@ -148,6 +151,44 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 1300));
     expect(tester.widget<AnimatedOpacity>(toast).opacity, 0);
+    await unmount(tester);
+  });
+
+  testWidgets('Ctrl+V anywhere in the window sends the clipboard', (
+    tester,
+  ) async {
+    final h = _Harness();
+    await h.pump(tester);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('https://example.com/pasted'), findsOneWidget);
+    expect(
+      (await h.engine.store.items()).single.item.content,
+      'https://example.com/pasted',
+    );
+    await unmount(tester);
+  });
+
+  testWidgets('Ctrl+V in the send field pastes instead of sending', (
+    tester,
+  ) async {
+    final h = _Harness();
+    await h.pump(tester);
+
+    await tester.tap(find.byKey(const Key('send')));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    await tester.pump();
+
+    expect(await h.engine.store.items(), isEmpty);
     await unmount(tester);
   });
 
