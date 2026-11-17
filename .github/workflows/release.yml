@@ -73,6 +73,14 @@ jobs:
             exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/specular-release.p12"
+      - name: Check that Java can read the signing key
+        env:
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          keytool -list -storetype pkcs12 \
+            -keystore "$RUNNER_TEMP/specular-release.p12" \
+            -storepass:env STORE_PASSWORD -alias "$KEY_ALIAS" > /dev/null
       - name: Build the signed APK
         env:
           SPECULAR_KEYSTORE_PATH: ${{ runner.temp }}/specular-release.p12
