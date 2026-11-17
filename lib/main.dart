@@ -8,6 +8,7 @@ import 'app/sync_coordinator.dart';
 import 'app/sync_lifecycle.dart';
 import 'backends/nextcloud/login_flow.dart';
 import 'backends/nextcloud/nextcloud_credentials.dart';
+import 'platform/background/background_sync.dart';
 import 'platform/share_intent/share_app.dart';
 import 'ui/home/home_screen.dart';
 import 'ui/login/login_screen.dart';
@@ -17,6 +18,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final services = await AppServices.open();
   runApp(SpecularApp(services: services));
+  unawaited(
+    scheduleBackgroundSync().catchError((Object _) {
+      // Background sync is a bonus; the app syncs on open/resume anyway.
+    }),
+  );
 }
 
 /// Entry point of the Android share target, started by `ShareActivity.kt`.
