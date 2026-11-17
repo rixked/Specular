@@ -6,7 +6,9 @@ import 'package:material_ui/material_ui.dart';
 import '../../backends/nextcloud/login_flow.dart';
 import '../../backends/nextcloud/nextcloud_credentials.dart';
 import '../../backends/storage_backend.dart';
+import '../common/specular_background.dart';
 import '../common/url_opener.dart';
+import '../theme/tokens.dart';
 
 /// First launch (SPEC.md §3.1): the user enters their Nextcloud address,
 /// approves access in the browser, and never types a password.
@@ -121,18 +123,23 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: switch (_step) {
-              _Step.form || _Step.starting => _buildForm(context),
-              _Step.waiting => _buildWaiting(context),
-              _Step.finishing => const Center(
-                child: CircularProgressIndicator(),
+      backgroundColor: SpecularColors.background,
+      body: SpecularBackground(
+        child: Center(
+          child: SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: switch (_step) {
+                  _Step.form || _Step.starting => _buildForm(context),
+                  _Step.waiting => _buildWaiting(context),
+                  _Step.finishing => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                },
               ),
-            },
+            ),
           ),
         ),
       ),
@@ -146,12 +153,23 @@ class _LoginScreenState extends State<LoginScreen> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Specular', style: theme.textTheme.headlineMedium),
+        const Text(
+          'Specular',
+          style: TextStyle(
+            fontSize: 34,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.7,
+          ),
+        ),
         const SizedBox(height: 8),
-        Text(
+        const Text(
           'Connect your Nextcloud. You approve access in the browser, '
           'no password needed.',
-          style: theme.textTheme.bodyMedium,
+          style: TextStyle(
+            fontSize: 15,
+            height: 1.5,
+            color: SpecularColors.textSecondary,
+          ),
         ),
         if (widget.message != null) ...[
           const SizedBox(height: 16),

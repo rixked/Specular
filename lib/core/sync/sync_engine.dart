@@ -96,6 +96,7 @@ final class SyncEngine {
   /// aren't downloaded again on every sync.
   final _unreadable = <String, String?>{};
   final _deviceNames = <String, String>{};
+  final _deviceEtags = <String, String?>{};
 
   /// Emits the items found by each sync that received something, for
   /// notifications and the "glint" animation.
@@ -251,6 +252,37 @@ final class SyncEngine {
       return byTime != 0 ? byTime : a.fileName.compareTo(b.fileName);
     });
     return notes;
+  });
+
+  /// The names of all devices that announced themselves, by device ID.
+  ///
+  /// Device files are only downloaded again when they changed. Offline,
+  /// the names known so far are returned.
+  Future<Map<String, String>> deviceNames() => _serialized(() async {
+    try {
+      final listing = await backend.list(RemoteLayout.devices);
+      for (final entry in listing.entries) {
+        if (entry.isDirectory || !entry.name.endsWith('.json')) continue;
+        final id = entry.name.substring(0, entry.name.length - 5);
+        if (_deviceNames.containsKey(id) && _deviceEtags[id] == entry.etag) {
+          continue;
+        }
+        try {
+          final bytes = await backend.get(RemoteLayout.devicePath(id));
+          _deviceNames[id] = Device.decode(utf8.decode(bytes)).name;
+          _deviceEtags[id] = entry.etag;
+        } on StorageNotFoundException {
+          // Removed in the meantime.
+        } on FormatException {
+          // Unreadable device file: fall back to the ID.
+        }
+      }
+    } on StorageNotFoundException {
+      // No device announced itself yet.
+    } on StorageUnavailableException {
+      // Offline: use what we know.
+    }
+    return Map.unmodifiable(_deviceNames);
   });
 
   /// The Markdown text of a kept note.

@@ -9,8 +9,9 @@ import 'app/sync_lifecycle.dart';
 import 'backends/nextcloud/login_flow.dart';
 import 'backends/nextcloud/nextcloud_credentials.dart';
 import 'platform/share_intent/share_app.dart';
-import 'ui/inbox/dev_inbox_screen.dart';
+import 'ui/home/home_screen.dart';
 import 'ui/login/login_screen.dart';
+import 'ui/theme/specular_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -107,9 +108,10 @@ class _SpecularAppState extends State<SpecularApp> {
     final engine = _services.engine;
     return MaterialApp(
       title: 'Specular',
-      theme: ThemeData(brightness: Brightness.dark),
+      debugShowCheckedModeBanner: false,
+      theme: specularTheme(),
       home: coordinator != null && engine != null
-          ? DevInboxScreen(
+          ? HomeScreen(
               engine: engine,
               coordinator: coordinator,
               onLogOut: _logOut,

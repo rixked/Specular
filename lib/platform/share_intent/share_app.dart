@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/app_services.dart';
+import '../../ui/common/glass_toast.dart';
+import '../../ui/theme/specular_theme.dart';
 import 'share_handler.dart';
 
 const _channel = MethodChannel('de.rixk.specular/share');
@@ -64,14 +66,14 @@ class _ShareAppState extends State<_ShareApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       color: Colors.transparent,
+      theme: specularTheme(),
       home: ShareConfirmation(outcome: _outcome),
     );
   }
 }
 
-/// The small confirmation pill shown over the app the user shared from.
-///
-/// Placeholder styling until the visual direction is chosen (SPEC.md §9).
+/// The small Soft Glass confirmation pill shown over the app the user
+/// shared from (SPEC.md §3.2, §9).
 class ShareConfirmation extends StatelessWidget {
   const ShareConfirmation({super.key, required this.outcome});
 
@@ -89,46 +91,17 @@ class ShareConfirmation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final message = messageFor(outcome);
-    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return Material(
       type: MaterialType.transparency,
       child: SafeArea(
         child: Align(
           alignment: const Alignment(0, 0.7),
-          child: AnimatedOpacity(
-            opacity: message == null ? 0 : 1,
-            duration: reduceMotion
-                ? Duration.zero
-                : const Duration(milliseconds: 180),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xE60E121A),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: const Color(0x33FFFFFF)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (outcome == ShareOutcome.sent) ...[
-                    const Icon(
-                      Icons.check_rounded,
-                      size: 18,
-                      color: Color(0xFF7DD3FC),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  Text(
-                    message ?? '',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ],
-              ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: GlassToast(
+              visible: message != null,
+              message: message ?? '',
+              icon: outcome == ShareOutcome.sent ? Icons.check_rounded : null,
             ),
           ),
         ),
