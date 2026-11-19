@@ -529,6 +529,20 @@ void main() {
       expect(text, startsWith('Line one\nline two\n\nSent from '));
     });
 
+    test('deletes a kept note; already gone counts as success', () async {
+      final item = await phone.engine.send('Short-lived note');
+      final fileName = await phone.engine.keep(item.id);
+
+      await pc.engine.deleteKeptNote(fileName);
+      await pc.engine.deleteKeptNote(fileName);
+
+      expect(await phone.engine.keptNotes(), isEmpty);
+      await expectLater(
+        pc.engine.deleteKeptNote('../My own note.md'),
+        throwsArgumentError,
+      );
+    });
+
     test('refuses paths outside the Kept folder', () async {
       await expectLater(
         pc.engine.readKeptNote('../Notes/My own note.md'),

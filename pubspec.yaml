@@ -1,7 +1,7 @@
 name: specular
 description: "Send links and notes to your own devices through your self-hosted Nextcloud."
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.1.1+2
 
 environment:
   sdk: ^3.14.0

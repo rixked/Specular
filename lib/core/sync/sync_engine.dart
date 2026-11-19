@@ -285,6 +285,19 @@ final class SyncEngine {
     return Map.unmodifiable(_deviceNames);
   });
 
+  /// Deletes a kept note from `/Notes/Specular/` (SPEC.md §3.4.1).
+  /// Already deleted counts as success. Nextcloud keeps it in its trash bin.
+  Future<void> deleteKeptNote(String fileName) => _serialized(() async {
+    if (fileName.contains('/') || fileName.contains('\\')) {
+      throw ArgumentError.value(fileName, 'fileName', 'Not a plain file name');
+    }
+    try {
+      await backend.delete(RemoteLayout.notePath(fileName));
+    } on StorageNotFoundException {
+      // Deleted elsewhere already.
+    }
+  });
+
   /// The Markdown text of a kept note.
   Future<String> readKeptNote(String fileName) => _serialized(() async {
     if (fileName.contains('/') || fileName.contains('\\')) {

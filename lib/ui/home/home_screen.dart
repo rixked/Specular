@@ -60,7 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _glintIds = <String>{};
 
   /// Items hidden while "Deleted · Undo" is showing.
-  final _pendingDeletes = <String>{};
+  final _pendingDeletes = <String, Future<void> Function()>{};
   static const _undoWindow = Duration(seconds: 4);
 
   List<KeptNote>? _kept;
@@ -99,8 +99,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _toastTimer?.cancel();
     _input.dispose();
     // Leaving the screen (e.g. closing the app) confirms pending deletes.
-    for (final id in _pendingDeletes.toList()) {
-      unawaited(_engine.delete(id).catchError((Object _) {}));
+    for (final commit in _pendingDeletes.values.toList()) {
+      unawaited(commit().catchError((Object _) {}));
     }
     super.dispose();
   }
@@ -260,8 +260,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   _Tabs(
                     tab: _tab,
-                    inboxCount: _items?.length,
-                    keptCount: _kept?.length,
+                    inboxCount: _items
+                        ?.where((i) => !_isPendingDelete('item:${i.id}'))
+                        .length,
+                    keptCount: _kept
+                        ?.where((n) => !_isPendingDelete('kept:${n.fileName}'))
+                        .length,
                     onSelect: (tab) {
                       setState(() => _tab = tab);
                       if (tab == HomeTab.kept) unawaited(_loadKept());
@@ -293,11 +297,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Hides the item right away and shows "Deleted · Undo". Only when the
-  /// bar closes without Undo is the item deleted on all devices.
-  void _deleteWithUndo(String id) {
-    if (!_pendingDeletes.add(id)) return;
-    setState(() {});
+  void _deleteItem(String id) =>
+      _deleteWithUndo('item:$id', () => _engine.delete(id));
+
+  void _deleteKept(String fileName) =>
+      _deleteWithUndo('kept:$fileName', () async {
+        await _engine.deleteKeptNote(fileName);
+        await _loadKept();
+      });
+
+  bool _isPendingDelete(String key) => _pendingDeletes.containsKey(key);
+
+  /// Hides the entry right away and shows "Deleted · Undo". Only when the
+  /// bar closes without Undo does [commit] run (on all devices).
+  void _deleteWithUndo(String key, Future<void> Function() commit) {
+    if (_pendingDeletes.containsKey(key)) return;
+    setState(() => _pendingDeletes[key] = commit);
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     final bar = messenger.showSnackBar(
@@ -317,26 +332,27 @@ class _HomeScreenState extends State<HomeScreen> {
     unawaited(
       bar.closed.then((reason) async {
         if (reason == SnackBarClosedReason.action) {
-          _pendingDeletes.remove(id);
+          _pendingDeletes.remove(key);
           if (mounted) setState(() {});
           return;
         }
-        await _commitDelete(id);
+        await _commitDelete(key);
       }),
     );
   }
 
-  Future<void> _commitDelete(String id) async {
-    if (!_pendingDeletes.contains(id)) return;
+  Future<void> _commitDelete(String key) async {
+    final commit = _pendingDeletes[key];
+    if (commit == null) return;
     try {
-      await _engine.delete(id);
+      await commit();
     } on Object catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_describeError(e))));
       }
     } finally {
-      _pendingDeletes.remove(id);
+      _pendingDeletes.remove(key);
       if (mounted) setState(() {});
     }
   }
@@ -344,7 +360,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildInbox() {
     final items = [
       for (final local in _items ?? const <LocalItem>[])
-        if (!_pendingDeletes.contains(local.id)) local,
+        if (!_isPendingDelete('item:${local.id}')) local,
     ];
     if (items.isEmpty) {
       return const _EmptyState(
@@ -362,7 +378,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final handler = _engine.registry.handlerFor(item.type);
         return Dismissible(
           key: ValueKey('dismiss-${item.id}'),
-          onDismissed: (_) => _deleteWithUndo(item.id),
+          onDismissed: (_) => _deleteItem(item.id),
           background: const _SwipeToDelete(alignment: Alignment.centerLeft),
           secondaryBackground: const _SwipeToDelete(
             alignment: Alignment.centerRight,
@@ -386,7 +402,7 @@ class _HomeScreenState extends State<HomeScreen> {
               await _engine.keep(item.id);
               await _loadKept();
             }, 'Kept · Notes › Specular'),
-            onDelete: () => _deleteWithUndo(item.id),
+            onDelete: () => _deleteItem(item.id),
           ),
         );
       },
@@ -394,7 +410,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildKept() {
-    final kept = _kept;
+    final kept = _kept
+        ?.where((n) => !_isPendingDelete('kept:${n.fileName}'))
+        .toList();
     if (kept == null) {
       if (_keptError != null) {
         return const _EmptyState(
@@ -430,13 +448,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, i) {
                       final note = kept[i];
-                      return KeptNoteCard(
-                        key: ValueKey(note.fileName),
-                        note: note,
-                        now: widget.clock(),
-                        loadBody: () => _engine.readKeptNote(note.fileName),
-                        onCopy: _copy,
-                        onOpenUrl: _openUrl,
+                      return Dismissible(
+                        key: ValueKey('dismiss-kept-${note.fileName}'),
+                        onDismissed: (_) => _deleteKept(note.fileName),
+                        background: const _SwipeToDelete(
+                          alignment: Alignment.centerLeft,
+                        ),
+                        secondaryBackground: const _SwipeToDelete(
+                          alignment: Alignment.centerRight,
+                        ),
+                        child: KeptNoteCard(
+                          key: ValueKey(note.fileName),
+                          note: note,
+                          now: widget.clock(),
+                          loadBody: () => _engine.readKeptNote(note.fileName),
+                          onCopy: _copy,
+                          onOpenUrl: _openUrl,
+                          onDelete: () => _deleteKept(note.fileName),
+                        ),
                       );
                     },
                   ),

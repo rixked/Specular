@@ -81,7 +81,7 @@ The user can revoke access at any time in Nextcloud → Settings → Security.
 
 - The app has two views, **Inbox** and **Kept**, switched at the top.
 - Kept lists every note in `/Notes/Specular/`, newest first, so it is the same on every device and also shows notes kept before this device was set up. No separate index is stored: the folder is the source of truth.
-- Kept cards offer Open, Copy and Expand / Collapse. Editing and deleting kept notes happens in the Nextcloud Notes app.
+- Kept cards offer Open, Copy, Expand / Collapse and Delete. Delete works like in the inbox (trash icon or swipe, "Deleted · Undo" for ~4 s) and then deletes the note from `/Notes/Specular/`; Nextcloud keeps it in its trash bin. Editing kept notes happens in the Nextcloud Notes app.
 - Kept notes are separated from the user's other notes: in the Notes app they appear as their own category, **Specular**.
 
 ### 3.5 Expiry

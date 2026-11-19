@@ -313,6 +313,42 @@ void main() {
     });
   });
 
+  testWidgets('kept notes can be deleted, with Undo', (tester) async {
+    final h = _Harness();
+    final first = (await h.engine.send('Delete this note')).id;
+    final second = (await h.engine.send('Keep this one')).id;
+    await h.engine.keep(first);
+    await h.engine.keep(second);
+    await h.pump(tester);
+
+    await tester.tap(find.byKey(const Key('tab-kept')));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete this note'), findsOneWidget);
+
+    // Undo keeps it.
+    await tester.tap(
+      find.byKey(const ValueKey('delete-kept-Delete this note.md')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Delete this note'), findsNothing);
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete this note'), findsOneWidget);
+
+    // Without Undo it is deleted in Nextcloud after the Undo window.
+    await tester.tap(
+      find.byKey(const ValueKey('delete-kept-Delete this note.md')),
+    );
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    expect(h.backend.filesIn(RemoteLayout.notes), ['Keep this one.md']);
+    expect(find.text('Delete this note'), findsNothing);
+    expect(find.text('Keep this one'), findsOneWidget);
+    await unmount(tester);
+  });
+
   testWidgets('kept items leave the inbox and show up under Kept', (
     tester,
   ) async {

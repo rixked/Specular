@@ -17,6 +17,7 @@ class KeptNoteCard extends StatefulWidget {
     required this.loadBody,
     required this.onCopy,
     required this.onOpenUrl,
+    required this.onDelete,
   });
 
   final KeptNote note;
@@ -24,6 +25,7 @@ class KeptNoteCard extends StatefulWidget {
   final Future<String> Function() loadBody;
   final void Function(String text) onCopy;
   final void Function(Uri url) onOpenUrl;
+  final VoidCallback onDelete;
 
   @override
   State<KeptNoteCard> createState() => _KeptNoteCardState();
@@ -153,6 +155,17 @@ class _KeptNoteCardState extends State<KeptNoteCard> {
                   tooltip: 'Copy',
                   onPressed: _copy,
                   icon: const Icon(Icons.copy_rounded, size: 18),
+                  color: SpecularColors.icon,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 44,
+                    height: 44,
+                  ),
+                ),
+                IconButton(
+                  key: ValueKey('delete-kept-${note.fileName}'),
+                  tooltip: 'Delete',
+                  onPressed: widget.onDelete,
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
                   color: SpecularColors.icon,
                   constraints: const BoxConstraints.tightFor(
                     width: 44,
